@@ -1,0 +1,25 @@
+<launch>
+  <!-- Gazebo 실행 -->
+  <node pkg="gazebo_ros" exec="gzserver" output="screen" name="gazebo_server">
+    <param name="use_sim_time" value="true"/>
+  </node>
+
+  <!-- Gazebo 클라이언트 실행 (GUI를 보고 싶을 때) -->
+  <node pkg="gazebo_ros" exec="gzclient" output="screen" name="gazebo_client">
+    <param name="use_sim_time" value="true"/>
+  </node>
+
+  <!-- 로봇 URDF 스폰 -->
+  <param name="robot_description" command="$(find xacro)/xacro $(find your_package)/urdf/scout_v2.xacro"/>
+
+  <node pkg="gazebo_ros" exec="spawn_entity.py" output="screen" name="spawn_urdf">
+    <param name="robot_namespace" value="scout_robot"/>
+    <param name="robot_description" value="$(param robot_description)"/>
+    <param name="initial_pose" value="{0, 0, 1, 0, 0, 0}"/>
+  </node>
+
+  <!-- robot_state_publisher 노드를 실행 -->
+  <node pkg="robot_state_publisher" exec="robot_state_publisher" output="screen">
+    <param name="use_sim_time" value="true"/>
+  </node>
+</launch>
