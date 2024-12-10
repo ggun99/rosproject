@@ -3,7 +3,7 @@ import rclpy
 from rclpy.node import Node 
 import sys
 import os
-import time
+from statistics import mean
 import numpy as np
 from geometry_msgs.msg import WrenchStamped
 wd = os.path.abspath(os.getcwd())
@@ -37,6 +37,13 @@ class Coppel_Ros2(Node):
        self.sim.startSimulation()
        self.previous_time = 0
        self.X_d_list = []
+       self.m_x = []
+       self.m_y = []
+       self.m_z = []
+       self.mean_x = None
+       self.mean_y = None
+       self.mean_z = None
+
 
 
 
@@ -57,33 +64,44 @@ class Coppel_Ros2(Node):
         ft.append(msg.wrench.torque.x)
         ft.append(msg.wrench.torque.y)
         ft.append(msg.wrench.torque.z)
-        threshold = 0.6
-        mean_x = -5
-        mean_y = 2.5
-        mean_z = -9
-        if np.abs(ft[0]-mean_x) < threshold:
-            ft[0] = 0
-        if np.abs(ft[1]-mean_y) < threshold:
-            ft[1] = 0
-        if np.abs(ft[2]-mean_z) < threshold:
-            ft[2] = 0
-        ft[0] = ft[0]-mean_x
-        ft[1] = ft[1]-mean_y
-        ft[2] = ft[2]-mean_z
-        print('ft', ft)
-        force_torque_input = np.array([ft[0], ft[1], ft[2], ft[3], ft[4], ft[5]]) # [Fx, Fy, Fz, Tx, Ty, Tz]
-        delta_position = admittance_controller.update(force_torque_input, dt)
-        print(f"==>> delta_position: {delta_position}")
-        if np.abs(delta_position[0])<0.001:
-            delta_position[0]=0
-        if np.abs(delta_position[1])<0.001:
-            delta_position[1]=0
-        if np.abs(delta_position[2])<0.001:
-            delta_position[2]=0
-        # delta_position = list(map(lambda x: x * 0.01, delta_position))
-        print(f"==>> position: {delta_position}")
-        self.coppel.coppeliasim(self.Kalman, self.Jacobian, dt, self.X_d_list, self.coppel_simulator, delta_position)
-        self.client.step()
+        if t < 2:
+            self.m_x.append(ft[0])
+            self.m_y.append(ft[1])
+            self.m_z.append(ft[2])
+        elif 2<t<2.5:
+            print(f'force mean {mean(self.m_x)}, {mean(self.m_y)}, {mean(self.m_z)} ')
+            self.mean_x = mean(self.m_x)
+            self.mean_y = mean(self.m_y)
+            self.mean_z = mean(self.m_z)
+        else:
+            threshold = 0.6
+            print('ft', ft)
+            if np.abs(ft[0]-self.mean_x) < threshold:
+                ft[0] = 0
+            else: ft[0] -= self.mean_x
+
+            if np.abs(ft[1]-self.mean_y) < threshold:
+                ft[1] = 0
+            else: ft[1] -= self.mean_y
+            if np.abs(ft[2]-self.mean_z) < threshold:
+                ft[2] = 0
+            else: ft[2] -= self.mean_z
+            print(f"==>> self.mean_z: {self.mean_z}")
+   
+            print('ft', ft)
+            force_torque_input = np.array([ft[0], ft[1], ft[2], ft[3], ft[4], ft[5]]) # [Fx, Fy, Fz, Tx, Ty, Tz]
+            delta_position = admittance_controller.update(force_torque_input, dt)
+            print(f"==>> delta_position: {delta_position}")
+            if np.abs(delta_position[0])<0.001:
+                delta_position[0]=0
+            if np.abs(delta_position[1])<0.001:
+                delta_position[1]=0
+            if np.abs(delta_position[2])<0.001:
+                delta_position[2]=0
+            # delta_position = list(map(lambda x: x * 0.01, delta_position))
+            print(f"==>> position: {delta_position}")
+            self.coppel.coppeliasim(self.Kalman, self.Jacobian, dt, self.X_d_list, self.coppel_simulator, delta_position)
+            self.client.step()
         
 
 def main(args=None):
