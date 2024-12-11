@@ -70,10 +70,10 @@ class Coppel_Ros2(Node):
         ft[0] = ft[0]-mean_x
         ft[1] = ft[1]-mean_y
         ft[2] = ft[2]-mean_z
-        print('ft', ft)
+        # print('ft', ft)
         force_torque_input = np.array([ft[0], ft[1], ft[2], ft[3], ft[4], ft[5]]) # [Fx, Fy, Fz, Tx, Ty, Tz]
         delta_position = admittance_controller.update(force_torque_input, dt)
-        print(f"==>> delta_position: {delta_position}")
+        # print(f"==>> delta_position: {delta_position}")
         if np.abs(delta_position[0])<0.001:
             delta_position[0]=0
         if np.abs(delta_position[1])<0.001:
@@ -81,7 +81,7 @@ class Coppel_Ros2(Node):
         if np.abs(delta_position[2])<0.001:
             delta_position[2]=0
         # delta_position = list(map(lambda x: x * 0.01, delta_position))
-        print(f"==>> position: {delta_position}")
+        # print(f"==>> position: {delta_position}")
         self.coppel.coppeliasim(self.Kalman, self.Jacobian, dt, self.X_d_list, self.coppel_simulator, delta_position)
         self.client.step()
         

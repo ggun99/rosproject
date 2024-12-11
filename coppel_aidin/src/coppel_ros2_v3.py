@@ -17,7 +17,7 @@ from jacobian import Jacobian
 from coppel_controller import coppel_controller
 from admittance_controller import AdmittanceController
 # from coppel_MM_jaco_kalman_class import Coppeliasim
-from coppel_jaco_kalman_class_moving import Coppeliasim
+from coppel_jaco_kalman_class_moving_v1 import Coppeliasim
 
 class Coppel_Ros2(Node):
     def __init__(self):
@@ -68,14 +68,14 @@ class Coppel_Ros2(Node):
             self.m_x.append(ft[0])
             self.m_y.append(ft[1])
             self.m_z.append(ft[2])
-        elif 2<t<2.5:
+        elif 2<t<2.2:
             print(f'force mean {mean(self.m_x)}, {mean(self.m_y)}, {mean(self.m_z)} ')
             self.mean_x = mean(self.m_x)
             self.mean_y = mean(self.m_y)
             self.mean_z = mean(self.m_z)
         else:
             threshold = 0.6
-            print('ft', ft)
+            # print('ft', ft)
             if np.abs(ft[0]-self.mean_x) < threshold:
                 ft[0] = 0
             else: ft[0] -= self.mean_x
@@ -86,12 +86,12 @@ class Coppel_Ros2(Node):
             if np.abs(ft[2]-self.mean_z) < threshold:
                 ft[2] = 0
             else: ft[2] -= self.mean_z
-            print(f"==>> self.mean_z: {self.mean_z}")
+            # print(f"==>> self.mean_z: {self.mean_z}")
    
-            print('ft', ft)
+            # print('ft', ft)
             force_torque_input = np.array([ft[0], ft[1], ft[2], ft[3], ft[4], ft[5]]) # [Fx, Fy, Fz, Tx, Ty, Tz]
             delta_position = admittance_controller.update(force_torque_input, dt)
-            print(f"==>> delta_position: {delta_position}")
+            # print(f"==>> delta_position: {delta_position}")
             if np.abs(delta_position[0])<0.001:
                 delta_position[0]=0
             if np.abs(delta_position[1])<0.001:
@@ -99,7 +99,7 @@ class Coppel_Ros2(Node):
             if np.abs(delta_position[2])<0.001:
                 delta_position[2]=0
             # delta_position = list(map(lambda x: x * 0.01, delta_position))
-            print(f"==>> position: {delta_position}")
+            # print(f"==>> position: {delta_position}")
             self.coppel.coppeliasim(self.Kalman, self.Jacobian, dt, self.X_d_list, self.coppel_simulator, delta_position)
             self.client.step()
         

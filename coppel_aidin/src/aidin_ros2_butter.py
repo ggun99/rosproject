@@ -5,6 +5,7 @@ import os
 import rclpy
 from rclpy.node import Node 
 from geometry_msgs.msg import WrenchStamped
+from scipy.signal import butter, lfilter
 
 wd = os.path.abspath(os.getcwd())
 sys.path.append(str(wd))
@@ -41,6 +42,10 @@ class AFT20D15(Node):
         self.Sigma_previous = None
         self.Vt_previous = None
         
+        # ft data list 저장
+        self.ft_x = []
+        self.ft_y = []
+        self.ft_z = []
         # Timer 설정
         self.timer = self.create_timer(0.01, self.publish_ft_data)  # 10ms 간격
 
@@ -80,10 +85,41 @@ class AFT20D15(Node):
                     ft[4] = torque[1]
                     ft[5] = torque[2]
         return ft
+           # Butterworth 저역통과 필터 설계
+    def butter_lowpass(self, cutoff, fs, order=5):
+        nyq = 0.5 * fs
+        normal_cutoff = cutoff / nyq
+        b, a = butter(order, normal_cutoff, btype='low', analog=False)
+        return b, a
+
+    # 필터 적용 함수
+    def butter_lowpass_filter(self, data, cutoff, fs, order=5):
+        b, a = self.butter_lowpass(cutoff, fs, order=order)
+        y = lfilter(b, a, data)
+        return y
 
     def publish_ft_data(self):
         ft = self.receive()
         if ft:
+            # Filter requirements.
+            cutoff = 5.0  # 저역통과 필터의 컷오프 주파수
+            fs = 100.0     # 프레임 속도 (초당 프레임)
+            order = 3     # 필터 차수
+            self.ft_x.append(ft[0])
+            self.ft_y.append(ft[1])
+            self.ft_z.append(ft[2])
+            if len(self.ft_x) > 50 :
+                self.ft_x.pop(0)
+                self.ft_y.pop(0)
+                self.ft_z.pop(0)
+            # 데이터가 충분할 때 필터 적용
+            if len(self.ft_x) > order:
+                filtered_ft_x = self.butter_lowpass_filter(self.ft_x, cutoff, fs, order)
+                filtered_ft_y = self.butter_lowpass_filter(self.ft_y, cutoff, fs, order)
+                filtered_ft_z = self.butter_lowpass_filter(self.ft_z, cutoff, fs, order)
+                ft[0] = filtered_ft_x[-1]
+                ft[1] = filtered_ft_y[-1]
+                ft[2] = filtered_ft_z[-1]
             # WrenchStamped 메시지 생성
             wrench_msg = WrenchStamped()
             wrench_msg.header.stamp = self.get_clock().now().to_msg()
