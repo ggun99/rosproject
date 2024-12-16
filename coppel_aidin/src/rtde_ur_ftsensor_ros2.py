@@ -24,12 +24,7 @@ class UR5e_ftsensor(Node):
         # RTDE 수신 객체 생성
         self.rtde_r = rtde_receive.RTDEReceiveInterface(self.ROBOT_IP)
         # ROS2 Publisher 초기화
-        self.ftPub = self.create_publisher(WrenchStamped, '/aidin_ftsensor', 10)
-
-        # 이전 데이터 저장
-        self.U_previous = None
-        self.Sigma_previous = None
-        self.Vt_previous = None
+        self.ftPub = self.create_publisher(WrenchStamped, '/ur_ftsensor', 10)
         
         # ft data list 저장
         self.ft_x = []

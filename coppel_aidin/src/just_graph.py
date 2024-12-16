@@ -13,7 +13,7 @@ class GraphNode(Node):
         super().__init__('graph_node')
         self.subscription = self.create_subscription(
             WrenchStamped,
-            '/aidin_ftsensor',
+            '/ur_ftsensor',
             self.listener_callback,
             10
         )
