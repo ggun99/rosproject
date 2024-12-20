@@ -81,10 +81,8 @@ class UR5e_controller(Node):
     def admittance(self):
         t_start = self.rtde_c.initPeriod()
         wrench = self.rtde_r.getActualTCPForce()   # 중력 혹은 다른 힘들이 보정이 된 TCP 에서 측정된 힘
-        # wrench = [0.0, 0.5, 0.0, 0.0, 0.0, 0.0]
         TCPpose = self.rtde_r.getActualTCPPose()
         TCPpose = np.array(TCPpose)
-        # print(f"==>> TCPpose: {TCPpose}")
         # raw_wrench = self.rtde_r.getFtRawWrench()   # 중력 혹은 다른 힘들이 일체 보정이 되지 않은 raw 데이터
         # 6D 벡터: [Fx, Fy, Fz, Tx, Ty, Tz]
         print("Force/Torque values:", wrench)
@@ -118,70 +116,45 @@ class UR5e_controller(Node):
         
         delta_position, _ = self.admit.update(ft, self.dt)
         joint_positions = self.rtde_r.getActualQ()
-        # print(f"==>> joint_positions: {joint_positions}")
         joint_vel = self.rtde_r.getActualQd()
 
         # joint velocity value
         joint_vel_arr = np.array([joint_vel[0],joint_vel[1],joint_vel[2],joint_vel[3],joint_vel[4],joint_vel[5]])
-        # print(f"==>> joint_vel_arr.shape: {joint_vel_arr.shape}")
     
         # new jac
         J = self.Jacobian.jacobian(joint_positions[0], joint_positions[1], joint_positions[2], joint_positions[3], joint_positions[4], joint_positions[5])
-        # jac_t, jac_r = self.robot.compute_jac(joint_positions)
-        # J = np.vstack((jac_t,jac_r))
-        j_J = J #@ J.T
-        # print('linear velocity', np.dot(J, joint_vel_arr))
+        j_J = J @ J.T
         
         # SVD 계산
         try:
             U, Sigma, Vt = np.linalg.svd(j_J, full_matrices=False, hermitian=False)
-            print(f"==>> Vt.shape: {Vt.shape}")
-            print(f"==>> Sigma.shape: {Sigma.shape}")
-            print(f"==>> U.shape: {U.shape}")
             self.U_previous, self.Sigma_previous, self.Vt_previous = U, Sigma, Vt  # 이전 값 업데이트
         except ValueError as e:
             print("SVD computation failed due to invalid input:")
             print(e)
             U, Sigma, Vt = self.U_previous, self.Sigma_previous, self.Vt_previous  # 이전 값 사용
         
-
-        
-        epsilon = 1e-6  # 작은 특이값에 대한 임계값
-        Sigma_inv = np.diag(1.0 / (Sigma + epsilon))  # 작은 특이값에 임계값을 더하여 안정화
-        # print(f"==>> Sigma_inv.shape: {Sigma_inv.shape}")
-        # Sigma_inv = np.linalg.pinv(np.diag(Sigma))
         max_q_dot = 0.1 # 최대 속도 한계를 설정
 
         # pseudo inverse jacobian matrix
-
-        J_pseudo = Vt.T@Sigma_inv@ U.T
-        print(f"==>> J_pseudo: {J_pseudo}")
         J_pseudo_inv = np.linalg.pinv(J)
         print(f"==>> J_pseudo_inv: {J_pseudo_inv}")
-        # print(f"==>> J_pseudo.shape: {J_pseudo.shape}")
-        d_goal_v = delta_position*0.1 # /np.linalg.norm(delta_position)
+
+        d_goal_v = delta_position*0.1 
         print(f"==>> d_goal_v: {d_goal_v}")
         q_dot = J_pseudo_inv @ d_goal_v
-
-        # q_dot = J_pseudo @ d_goal_v
 
         cal_check = J @ q_dot
         print('checking:',cal_check)
         # 속도가 한계를 초과하면 제한
         q_dot = np.clip(q_dot, -max_q_dot, max_q_dot)
         q_dot = q_dot.flatten()
-        # print(f"==>> q_dot.shape: {q_dot.shape}")
-        # print(q_dot)
         acceleration = 0.2
-        # q_dot_ = q_dot + joint_vel_arr
-        # print(f"==>> q_dot_: {q_dot}")
-        tcppose = TCPpose + d_goal_v
-        # joint_pose = self.rtde_c.getInverseKinematics(tcppose)
-        # print(f"==>> joint_pose: {joint_pose}")
+
+
         if self.emergency_stop:
             q_dot = np.array([[0.0],[0.0],[0.0],[0.0],[0.0],[0.0]])
-        # self.rtde_c.moveL(tcppose, 0.25, 1.2)
-        # self.rtde_c.moveJ(joint_pose, 1.0, 0.2)
+
         self.rtde_c.speedJ(q_dot, acceleration, self.dt)
         self.rtde_c.waitPeriod(t_start)
 
