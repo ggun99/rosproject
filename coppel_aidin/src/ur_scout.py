@@ -19,6 +19,9 @@ from rclpy.node import Node
 from scipy.signal import butter, lfilter
 from pybullet_test.sim_ur5e_bullet import UR5eBullet
 import threading
+from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Twist, Pose
+import math
 
 class UR5e_controller(Node):
     def __init__(self):
@@ -42,8 +45,8 @@ class UR5e_controller(Node):
         self.previous_time = time.time() 
         self.Jacobian = Jacobian()
         M = np.diag([15.0, 15.0, 15.0, 2.0, 2.0, 2.0])  # Mass matrix
-        B = np.diag([20.0, 20.0, 20.0, 2.0, 2.0, 2.0])  # Damping matrix
-        K = np.diag([50.0, 50.0, 50.0, 5.0, 5.0, 5.0])  # Stiffness matrix
+        B = np.diag([50.0, 50.0, 50.0, 2.0, 2.0, 2.0])  # Damping matrix
+        K = np.diag([100.0, 100.0, 100.0, 5.0, 5.0, 5.0])  # Stiffness matrix
         self.admit = AdmittanceController(M, B, K)
         self.dt = 0.05
         self.timer = self.create_timer(self.dt, self.admittance)
@@ -57,6 +60,42 @@ class UR5e_controller(Node):
         self.emergency_stop_thread = threading.Thread(target=self.emergency_stop_listener)
         self.emergency_stop_thread.daemon = True
         self.emergency_stop_thread.start()
+        # mobile robot
+        self.dTol = 0.05 # distance Tolerance? 
+        self.controlpublisher = self.create_publisher(Twist,'/cmd_vel', 10)
+
+    def euler_from_quaternion(self, x, y, z, w):
+        t0 = +2.0 * (w * x + y * z)
+        t1 = +1.0 - 2.0 * (x * x + y * y)
+        roll_x = math.atan2(t0, t1)
+
+        t2 = +2.0 * (w * y - z * x)
+        t2 = +1.0 if t2 > +1.0 else t2
+        t2 = -1.0 if t2 < -1.0 else t2
+        pitch_y = math.asin(t2)
+
+        t3 = +2.0 * (w * z + x * y)
+        t4 = +1.0 - 2.0 * (y * y + z * z)
+        yaw_z = math.atan2(t3, t4)
+
+        return roll_x, pitch_y, yaw_z # in radians  
+
+    def kinematic_control(self, x_p, y_p): #, z_e):
+        distance = x_p
+        e_x = distance - self.offset
+        if -self.dTol < e_x < self.dTol:
+            vc = 0.0
+        else:
+            vc = float(self.K1*e_x)
+
+        ro_distance = y_p
+        e_y = ro_distance
+        if -self.dTol < e_y < self.dTol:
+            wc = 0.0
+        else:
+            wc = float(self.K2*e_y)
+       
+        return vc, wc #np.array([[vc], [wc]])
 
     def emergency_stop_listener(self):
         #  """Listen for Enter key to activate emergency stop."""
@@ -154,9 +193,17 @@ class UR5e_controller(Node):
 
         if self.emergency_stop:
             q_dot = np.array([[0.0],[0.0],[0.0],[0.0],[0.0],[0.0]])
-
+        # control manipulator
         self.rtde_c.speedJ(q_dot, acceleration, self.dt)
         self.rtde_c.waitPeriod(t_start)
+        # control mobile robot
+        vc, wc = self.kinematic_control(delta_position[0], delta_position[1])
+        print(f"==>> wc: {wc}")
+        print(f"==>> vc: {vc}")
+        twist = Twist()
+        twist.linear.x = vc
+        twist.angular.z = wc
+        self.controlpublisher.publish(twist)
 
 def main(args=None):
     rclpy.init(args=args)
