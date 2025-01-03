@@ -1,6 +1,7 @@
 import time
 import sys
 import os
+from turtle import distance
 import scipy.linalg
 
 import rclpy.time
@@ -26,7 +27,7 @@ import math
 class UR5e_controller(Node):
     def __init__(self):
         super().__init__('UR5e_node')
-        self.ROBOT_IP = '192.168.0.3'  # 로봇의 IP 주소로 바꿔주세요
+        self.ROBOT_IP = '192.168.0.212'  # 로봇의 IP 주소로 바꿔주세요
         # RTDE 수신 객체 생성
         self.rtde_r = rtde_receive.RTDEReceiveInterface(self.ROBOT_IP)
         # RTDE Control Interface 초기화
@@ -45,7 +46,7 @@ class UR5e_controller(Node):
         self.previous_time = time.time() 
         self.Jacobian = Jacobian()
         M = np.diag([15.0, 15.0, 15.0, 2.0, 2.0, 2.0])  # Mass matrix
-        B = np.diag([50.0, 50.0, 50.0, 2.0, 2.0, 2.0])  # Damping matrix
+        B = np.diag([25.0, 25.0, 25.0, 2.0, 2.0, 2.0])  # Damping matrix
         K = np.diag([100.0, 100.0, 100.0, 5.0, 5.0, 5.0])  # Stiffness matrix
         self.admit = AdmittanceController(M, B, K)
         self.dt = 0.05
@@ -63,6 +64,8 @@ class UR5e_controller(Node):
         # mobile robot
         self.dTol = 0.05 # distance Tolerance? 
         self.controlpublisher = self.create_publisher(Twist,'/cmd_vel', 10)
+        self.K1 = 0.2
+        self.K2 = 0.2
 
     def euler_from_quaternion(self, x, y, z, w):
         t0 = +2.0 * (w * x + y * z)
@@ -81,17 +84,23 @@ class UR5e_controller(Node):
         return roll_x, pitch_y, yaw_z # in radians  
 
     def kinematic_control(self, x_p, y_p): #, z_e):
-        distance = x_p
-        e_x = distance - self.offset
+        e_x = x_p
         if -self.dTol < e_x < self.dTol:
             vc = 0.0
+        elif self.K1*e_x > 0.1 :
+            vc = 0.1
+        elif self.K1*e_x < -0.1 :
+            vc = -0.1
         else:
             vc = float(self.K1*e_x)
 
-        ro_distance = y_p
-        e_y = ro_distance
+        e_y = y_p
         if -self.dTol < e_y < self.dTol:
             wc = 0.0
+        elif self.K2*e_y > 0.1 :
+            wc = 0.1
+        elif self.K2*e_x < -0.1 :
+            wc = -0.1
         else:
             wc = float(self.K2*e_y)
        
@@ -180,6 +189,7 @@ class UR5e_controller(Node):
         print(f"==>> J_pseudo_inv: {J_pseudo_inv}")
 
         d_goal_v = delta_position*0.1
+        print(f"==>> delta_position: {delta_position}")
         print(f"==>> d_goal_v: {d_goal_v}")
         q_dot = J_pseudo_inv @ d_goal_v
 

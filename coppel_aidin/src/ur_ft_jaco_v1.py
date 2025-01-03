@@ -23,7 +23,7 @@ import threading
 class UR5e_controller(Node):
     def __init__(self):
         super().__init__('UR5e_node')
-        self.ROBOT_IP = '192.168.0.3'  # 로봇의 IP 주소로 바꿔주세요
+        self.ROBOT_IP = '192.168.0.212'  # 로봇의 IP 주소로 바꿔주세요
         # RTDE 수신 객체 생성
         self.rtde_r = rtde_receive.RTDEReceiveInterface(self.ROBOT_IP)
         # RTDE Control Interface 초기화
