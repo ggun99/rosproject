@@ -21,7 +21,7 @@ from scipy.signal import butter, lfilter
 from pybullet_test.sim_ur5e_bullet import UR5eBullet
 import threading
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Twist, Pose
+from geometry_msgs.msg import Twist, WrenchStamped, Pose
 import math
 
 class UR5e_controller(Node):
@@ -45,9 +45,9 @@ class UR5e_controller(Node):
         self.Vt_previous = None  
         self.previous_time = time.time() 
         self.Jacobian = Jacobian()
-        M = np.diag([15.0, 15.0, 15.0, 2.0, 2.0, 2.0])  # Mass matrix
-        B = np.diag([25.0, 25.0, 25.0, 2.0, 2.0, 2.0])  # Damping matrix
-        K = np.diag([100.0, 100.0, 100.0, 5.0, 5.0, 5.0])  # Stiffness matrix
+        M = np.diag([10.0, 10.0, 10.0, 0.3, 0.3, 0.3])  # Mass matrix
+        B = np.diag([40.0, 40.0, 40.0, 2.0, 2.0, 2.0])  # Damping matrix
+        K = np.diag([40.0, 40.0, 40.0, 0.0, 0.0, 0.0])  # Stiffness matrix
         self.admit = AdmittanceController(M, B, K)
         self.dt = 0.05
         self.timer = self.create_timer(self.dt, self.admittance)
@@ -64,6 +64,7 @@ class UR5e_controller(Node):
         # mobile robot
         self.dTol = 0.05 # distance Tolerance? 
         self.controlpublisher = self.create_publisher(Twist,'/cmd_vel', 10)
+        self.ftpublisher = self.create_publisher(WrenchStamped,'/ur_ftsensor', 10)
         self.K1 = 0.2
         self.K2 = 0.2
         self.integral_dist = 0
@@ -167,8 +168,8 @@ class UR5e_controller(Node):
     def admittance(self):
         t_start = self.rtde_c.initPeriod()
         wrench = self.rtde_r.getActualTCPForce()   # 중력 혹은 다른 힘들이 보정이 된 TCP 에서 측정된 힘
-        TCPpose = self.rtde_r.getActualTCPPose()
-        TCPpose = np.array(TCPpose)
+        # TCPpose = self.rtde_r.getActualTCPPose()
+        # TCPpose = np.array(TCPpose)
         # raw_wrench = self.rtde_r.getFtRawWrench()   # 중력 혹은 다른 힘들이 일체 보정이 되지 않은 raw 데이터
         # 6D 벡터: [Fx, Fy, Fz, Tx, Ty, Tz]
         print("Force/Torque values:", wrench)
@@ -202,10 +203,20 @@ class UR5e_controller(Node):
         
         delta_position, _ = self.admit.update(ft, self.dt)
         joint_positions = self.rtde_r.getActualQ()
-        joint_vel = self.rtde_r.getActualQd()
+        wrenchstamp = WrenchStamped()
+        wrenchstamp.wrench.force.x = joint_positions[0]
+        wrenchstamp.wrench.force.y = joint_positions[1]
+        wrenchstamp.wrench.force.z = joint_positions[2]
+        self.ftpublisher.publish(wrenchstamp)
+
+        # T = self.admit.forward_kinematics_ur5e(joint_positions)
+        # R = T[:3,:3]
+
+
+        # joint_vel = self.rtde_r.getActualQd()
 
         # joint velocity value
-        joint_vel_arr = np.array([joint_vel[0],joint_vel[1],joint_vel[2],joint_vel[3],joint_vel[4],joint_vel[5]])
+        # joint_vel_arr = np.array([joint_vel[0],joint_vel[1],joint_vel[2],joint_vel[3],joint_vel[4],joint_vel[5]])
     
         # new jac
         J = self.Jacobian.jacobian(joint_positions[0], joint_positions[1], joint_positions[2], joint_positions[3], joint_positions[4], joint_positions[5])
